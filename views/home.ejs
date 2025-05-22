@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head><title>Amazon Cognito Login</title></head>
+<body>
+  <h1>Amazon Cognito Login Demo</h1>
+
+  <% if (isAuthenticated && userInfo) { %>
+    <h2>Welcome, <%= userInfo.email || userInfo.username %></h2>
+    <pre><%= JSON.stringify(userInfo, null, 2) %></pre>
+    <a href="/logout">Logout</a>
+  <% } else { %>
+    <p>You are not logged in.</p>
+    <a href="/login">Login</a>
+  <% } %>
+</body>
+</html>
