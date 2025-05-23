@@ -1,11 +1,15 @@
 const { Pool } = require('pg');
+require('dotenv').config();
 
 const pool = new Pool({
-  user: 'postgres',
-  host: 'localhost',
-  database: 'task_db',
-  password: 'Mh24116528',
-  port: 5432
+  user: process.env.PGUSER,
+  host: process.env.PGHOST,
+  database: process.env.PGDATABASE,
+  password: process.env.PGPASSWORD,
+  port: process.env.PGPORT,
+  ssl: {
+    rejectUnauthorized: false // for AWS RDS
+  }
 });
 
 // Optional: verify DB connection on startup
@@ -35,84 +39,65 @@ async function createTask(task) {
     task.file_url || null
   ];
 
-  try {
-    const result = await pool.query(query, values);
-    return result.rows[0];
-  } catch (err) {
-    console.error('❌ Task creation error:', err.message);
-    throw err;
-  }
+  const result = await pool.query(query, values);
+  return result.rows[0];
 }
 
 // Get task by ID
 async function getTaskById(task_id) {
-  const query = `SELECT * FROM tasks WHERE task_id = $1`;
-  try {
-    const result = await pool.query(query, [task_id]);
-    return result.rows[0];
-  } catch (err) {
-    console.error('❌ Error getting task by ID:', err.message);
-    throw err;
-  }
+  const result = await pool.query('SELECT * FROM tasks WHERE task_id = $1', [task_id]);
+  return result.rows[0];
 }
 
 // Get tasks by user ID
 async function getTasksByUser(user_id) {
-  const query = `SELECT * FROM tasks WHERE user_id = $1 ORDER BY due_date DESC`;
-  try {
-    const result = await pool.query(query, [user_id]);
-    return result.rows;
-  } catch (err) {
-    console.error('❌ Error getting tasks by user:', err.message);
-    throw err;
-  }
+  const result = await pool.query('SELECT * FROM tasks WHERE user_id = $1 ORDER BY due_date DESC', [user_id]);
+  return result.rows;
 }
 
 // Update task
 async function updateTask(task_id, updates) {
   const fields = [];
   const values = [];
-  let index = 1;
+  Object.entries(updates).forEach(([key, value], i) => {
+    fields.push(`${key} = $${i + 1}`);
+    values.push(value);
+  });
 
-  for (const key in updates) {
-    fields.push(`${key} = $${index}`);
-    values.push(updates[key]);
-    index++;
-  }
-
+  values.push(task_id);
   const query = `
     UPDATE tasks SET ${fields.join(', ')}
-    WHERE task_id = $${index}
+    WHERE task_id = $${values.length}
     RETURNING *;
   `;
-  values.push(task_id);
-
-  try {
-    const result = await pool.query(query, values);
-    return result.rows[0];
-  } catch (err) {
-    console.error('❌ Error updating task:', err.message);
-    throw err;
-  }
+  const result = await pool.query(query, values);
+  return result.rows[0];
 }
 
 // Delete task
 async function deleteTask(task_id) {
-  const query = `DELETE FROM tasks WHERE task_id = $1 RETURNING *`;
-  try {
-    const result = await pool.query(query, [task_id]);
-    return result.rows[0];
-  } catch (err) {
-    console.error('❌ Error deleting task:', err.message);
-    throw err;
-  }
+  const result = await pool.query('DELETE FROM tasks WHERE task_id = $1 RETURNING *', [task_id]);
+  return result.rows[0];
 }
 
-// Export all
+// Insert or fetch user_id from users table
+async function insertOrGetUser(email, name) {
+  const query = `
+    INSERT INTO users (email, name)
+    VALUES ($1, $2)
+    ON CONFLICT (email)
+    DO UPDATE SET name = EXCLUDED.name
+    RETURNING user_id;
+  `;
+  const values = [email, name];
+  const result = await pool.query(query, values);
+  return result.rows[0];
+}
 module.exports = {
   createTask,
   getTaskById,
   getTasksByUser,
   updateTask,
-  deleteTask
+  deleteTask,
+  insertOrGetUser
 };
